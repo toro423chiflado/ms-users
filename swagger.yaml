@@ -1,0 +1,398 @@
+openapi: 3.0.3
+info:
+  title: MS1 - Users & Auth API
+  description: |
+    Microservicio de autenticación y gestión de usuarios para UTEC Rate.
+
+    **Solo acepta correos @utec.edu.pe.**
+    No hay registro público — las cuentas las crea el Admin.
+
+    ## Credenciales de prueba
+    | Rol | Correo | Contraseña |
+    |-----|--------|-----------|
+    | ADMIN | admin@utec.edu.pe | admin123 |
+    | PROFESOR | juan.perez@utec.edu.pe | profesor123 |
+    | ESTUDIANTE | maria.garcia@utec.edu.pe | estudiante123 |
+  version: 1.0.0
+  contact:
+    name: UTEC Rate
+servers:
+  - url: http://localhost:3001
+    description: Desarrollo local
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [correo, password]
+      properties:
+        correo:
+          type: string
+          example: admin@utec.edu.pe
+        password:
+          type: string
+          example: admin123
+
+    LoginResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: Bienvenido, Admin
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        usuario:
+          $ref: '#/components/schemas/UsuarioPerfil'
+
+    UsuarioPerfil:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        apellido:
+          type: string
+        correo:
+          type: string
+        rol:
+          type: string
+          enum: [ADMIN, PROFESOR, ESTUDIANTE]
+        foto:
+          type: string
+          nullable: true
+
+    UsuarioCrear:
+      type: object
+      required: [nombre, apellido, correo, password, rol]
+      properties:
+        nombre:
+          type: string
+          example: Carlos
+        apellido:
+          type: string
+          example: López
+        correo:
+          type: string
+          example: carlos.lopez@utec.edu.pe
+        password:
+          type: string
+          example: mipassword123
+        rol:
+          type: string
+          enum: [ADMIN, PROFESOR, ESTUDIANTE]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+
+paths:
+  /health:
+    get:
+      tags: [Sistema]
+      summary: Health check
+      responses:
+        200:
+          description: Servicio operativo
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Iniciar sesión
+      description: Autentica con correo @utec.edu.pe. Devuelve access token (8h) y refresh token (7d).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        200:
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        400:
+          description: Campos faltantes
+        401:
+          description: Credenciales incorrectas
+        403:
+          description: Dominio no permitido o cuenta desactivada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                dominio:
+                  value: { error: "Solo se permiten correos con dominio @utec.edu.pe", code: "INVALID_DOMAIN" }
+                desactivado:
+                  value: { error: "Cuenta desactivada. Contacta al administrador.", code: "ACCOUNT_DISABLED" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Renovar tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        200:
+          description: Nuevos tokens emitidos
+        401:
+          description: Refresh token inválido, expirado o revocado
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Cerrar sesión
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Sesión cerrada
+        401:
+          description: No autenticado
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Perfil del usuario autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Perfil completo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioPerfil'
+        401:
+          description: No autenticado
+
+  /usuarios:
+    get:
+      tags: [Usuarios]
+      summary: Listar usuarios (solo ADMIN)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: rol
+          schema:
+            type: string
+            enum: [ADMIN, PROFESOR, ESTUDIANTE]
+        - in: query
+          name: activo
+          schema:
+            type: boolean
+        - in: query
+          name: buscar
+          schema:
+            type: string
+        - in: query
+          name: pagina
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limite
+          schema:
+            type: integer
+            default: 20
+      responses:
+        200:
+          description: Lista paginada de usuarios
+        403:
+          description: Sin permiso
+    post:
+      tags: [Usuarios]
+      summary: Crear usuario (solo ADMIN)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioCrear'
+      responses:
+        201:
+          description: Usuario creado
+        409:
+          description: Correo ya existe
+
+  /usuarios/{id}:
+    get:
+      tags: [Usuarios]
+      summary: Obtener perfil por ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Perfil del usuario
+        404:
+          description: No encontrado
+    put:
+      tags: [Usuarios]
+      summary: Actualizar perfil
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:    { type: string }
+                apellido:  { type: string }
+                foto:      { type: string }
+                github:    { type: string }
+                linkedin:  { type: string }
+                rol:       { type: string, enum: [ADMIN, PROFESOR, ESTUDIANTE] }
+                activo:    { type: boolean }
+      responses:
+        200:
+          description: Perfil actualizado
+    delete:
+      tags: [Usuarios]
+      summary: Desactivar cuenta (solo ADMIN, soft delete)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Cuenta desactivada
+
+  /usuarios/padlet/solicitar:
+    post:
+      tags: [Padlet]
+      summary: Estudiante solicita acceso al padlet
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profesorCursoId]
+              properties:
+                profesorCursoId:
+                  type: integer
+                  example: 1
+      responses:
+        201:
+          description: Solicitud enviada
+        409:
+          description: Ya existe una solicitud
+
+  /usuarios/padlet/solicitudes/{profesorCursoId}:
+    get:
+      tags: [Padlet]
+      summary: Profesor ve solicitudes de su clase
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: profesorCursoId
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Lista de solicitudes
+
+  /usuarios/padlet/{id}/responder:
+    put:
+      tags: [Padlet]
+      summary: Profesor admite o deniega acceso
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estado]
+              properties:
+                estado:
+                  type: string
+                  enum: [PERMITIDO, DENEGADO]
+      responses:
+        200:
+          description: Solicitud respondida
+
+  /usuarios/padlet/verificar/{profesorCursoId}:
+    get:
+      tags: [Padlet]
+      summary: Verifica si el usuario tiene acceso (usado por MS3)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: profesorCursoId
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Estado de acceso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tieneAcceso:
+                    type: boolean
+                  estado:
+                    type: string
+                    enum: [PERMITIDO, DENEGADO, PENDIENTE, SIN_SOLICITUD]

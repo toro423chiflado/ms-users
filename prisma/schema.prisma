@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMIN
+  PROFESOR
+  ESTUDIANTE
+}
+
+model Usuario {
+  id            String   @id @default(uuid())
+  nombre        String   @db.VarChar(80)
+  apellido      String   @db.VarChar(80)
+  correo        String   @unique @db.VarChar(100)
+  passwordHash  String   @map("password_hash") @db.VarChar(255)
+  rol           Rol
+  github        String?  @db.Text
+  linkedin      String?  @db.Text
+  foto          String?  @db.Text
+  activo        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  refreshTokens RefreshToken[]
+  accesosPadlet AccesoPadlet[] @relation("EstudiantePadlet")
+
+  @@map("usuarios")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  usuarioId  String   @map("usuario_id")
+  token      String   @unique @db.Text
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz()
+  revocado   Boolean  @default(false)
+
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model AccesoPadlet {
+  id               String   @id @default(uuid())
+  estudianteId     String   @map("estudiante_id")
+  profesorCursoId  Int      @map("profesor_curso_id")
+  estado           EstadoPadlet @default(PENDIENTE)
+  solicitadoAt     DateTime @default(now()) @map("solicitado_at") @db.Timestamptz()
+  respondidoAt     DateTime? @map("respondido_at") @db.Timestamptz()
+
+  estudiante       Usuario  @relation("EstudiantePadlet", fields: [estudianteId], references: [id], onDelete: Cascade)
+
+  @@unique([estudianteId, profesorCursoId])
+  @@map("acceso_padlet")
+}
+
+enum EstadoPadlet {
+  PENDIENTE
+  PERMITIDO
+  DENEGADO
+}
