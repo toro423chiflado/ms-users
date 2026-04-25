@@ -1,0 +1,33 @@
+# Variables de entorno
+.env
+.env.*.local
+
+# Dependencias
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Entornos de desarrollo locales
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# macOS
+.DS_Store
+
+# Archivos de cobertura de pruebas
+coverage/
+.nyc_output/
+
+# Firebase Service Account (Asegurar que nunca se suba si accidentalmente se deja un archivo JSON)
+*-firebase-adminsdk-*.json
+firebase-service-account.json

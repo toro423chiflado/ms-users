@@ -1,0 +1,43 @@
+version: '3.9'
+
+services:
+
+  # ── Base de datos PostgreSQL ──────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: utec_auth_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       auth_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── MS1 ms-users ─────────────────────────────────────────────
+  ms-users:
+    build: .
+    container_name: utec_ms_users
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL:        postgresql://postgres:postgres@postgres:5432/auth_db
+      JWT_SECRET:          utec_rate_secret_dev_2025
+      JWT_REFRESH_SECRET:  utec_rate_refresh_dev_2025
+      PORT:                3001
+      NODE_ENV:            development
+      CORS_ORIGIN:         "*"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
