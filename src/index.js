@@ -7,6 +7,7 @@ const path    = require('path');
 
 const authRoutes    = require('./routes/auth.routes');
 const usuariosRoutes = require('./routes/usuarios.routes');
+const adminRoutes    = require('./routes/admin.routes');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +45,7 @@ app.get('/health', (req, res) => {
 // ── Rutas ────────────────────────────────────────────────────────
 app.use('/auth',     authRoutes);
 app.use('/usuarios', usuariosRoutes);
+app.use('/admin',    adminRoutes);
 
 // ── 404 ──────────────────────────────────────────────────────────
 app.use((req, res) => {

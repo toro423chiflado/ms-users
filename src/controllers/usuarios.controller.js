@@ -208,4 +208,38 @@ async function desactivar(req, res) {
   }
 }
 
-module.exports = { listar, obtener, crear, actualizar, desactivar };
+/**
+ * PUT /admin/usuarios/:id/role
+ * Solo ADMIN. Cambia exclusivamente el rol.
+ */
+async function cambiarRol(req, res) {
+  try {
+    const { id } = req.params;
+    const { rol } = req.body;
+
+    if (!rol) {
+      return res.status(400).json({ error: 'El campo rol es requerido' });
+    }
+
+    const rolesValidos = ['ADMIN', 'PROFESOR', 'ESTUDIANTE'];
+    if (!rolesValidos.includes(rol.toUpperCase())) {
+      return res.status(400).json({ error: `Rol inválido. Valores: ${rolesValidos.join(', ')}` });
+    }
+
+    const actualizado = await prisma.usuario.update({
+      where: { id },
+      data: { rol: rol.toUpperCase() },
+      select: {
+        id: true, nombre: true, apellido: true, correo: true, rol: true
+      },
+    });
+
+    return res.status(200).json({ mensaje: 'Rol actualizado', usuario: actualizado });
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Usuario no encontrado' });
+    console.error('[USUARIOS] cambiarRol error:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { listar, obtener, crear, actualizar, desactivar, cambiarRol };

@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { login, refresh, logout, whoami } = require('../controllers/auth.controller');
+const { login, register, googleSignIn, refresh, logout, whoami } = require('../controllers/auth.controller');
 const { verifyJWT } = require('../middleware/auth.middleware');
 
 const router = Router();
@@ -33,6 +33,24 @@ const router = Router();
  *         description: Dominio no permitido o cuenta desactivada
  */
 router.post('/login', login);
+
+/**
+ * @openapi
+ * /auth/register:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Registro local para estudiantes
+ */
+router.post('/register', register);
+
+/**
+ * @openapi
+ * /auth/google:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Iniciar sesión o registrarse con Google (Firebase)
+ */
+router.post('/google', googleSignIn);
 
 /**
  * @openapi

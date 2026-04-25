@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/db');
 const { generarTokens, rotarRefreshToken, revocarTodos } = require('../services/jwt.service');
+const admin = require('../config/firebase');
 
 // Regex estricta: solo correos @utec.edu.pe
 const UTEC_REGEX = /^[a-zA-Z0-9._%+\-]+@utec\.edu\.pe$/i;
@@ -135,4 +136,145 @@ async function whoami(req, res) {
   }
 }
 
-module.exports = { login, refresh, logout, whoami };
+/**
+ * POST /auth/register
+ * Body: { nombre, apellido, correo, password }
+ * Registro público para estudiantes. Validar @utec.edu.pe
+ */
+async function register(req, res) {
+  try {
+    const { nombre, apellido, correo, password } = req.body;
+
+    if (!nombre || !apellido || !correo || !password) {
+      return res.status(400).json({ error: 'Todos los campos son requeridos' });
+    }
+
+    if (!UTEC_REGEX.test(correo)) {
+      return res.status(403).json({ error: 'Solo se permiten correos @utec.edu.pe' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+    }
+
+    const existe = await prisma.usuario.findUnique({ where: { correo: correo.toLowerCase() } });
+    if (existe) {
+      return res.status(409).json({ error: 'El correo ya está registrado' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const nuevoUsuario = await prisma.usuario.create({
+      data: {
+        nombre,
+        apellido,
+        correo: correo.toLowerCase(),
+        passwordHash,
+        rol: 'ESTUDIANTE', // Por defecto
+      },
+    });
+
+    const { accessToken, refreshToken } = await generarTokens(nuevoUsuario);
+
+    return res.status(201).json({
+      mensaje: 'Registro exitoso',
+      accessToken,
+      refreshToken,
+      usuario: {
+        id: nuevoUsuario.id,
+        nombre: nuevoUsuario.nombre,
+        apellido: nuevoUsuario.apellido,
+        correo: nuevoUsuario.correo,
+        rol: nuevoUsuario.rol,
+      },
+    });
+  } catch (err) {
+    console.error('[AUTH] register error:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+/**
+ * POST /auth/google
+ * Body: { idToken }
+ * Recibe el token de Firebase, verifica, busca o crea usuario ESTUDIANTE.
+ */
+async function googleSignIn(req, res) {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({ error: 'idToken es requerido' });
+    }
+
+    if (!admin) {
+      return res.status(500).json({ error: 'Firebase no está configurado en el servidor' });
+    }
+
+    // 1. Verificar token con Firebase
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (error) {
+      console.error('[AUTH] google token error:', error);
+      return res.status(401).json({ error: 'Token de Google inválido o expirado' });
+    }
+
+    const { email, name, picture } = decodedToken;
+
+    // 2. Validar dominio
+    if (!UTEC_REGEX.test(email)) {
+      return res.status(403).json({ error: 'Solo se permiten correos @utec.edu.pe' });
+    }
+
+    // 3. Buscar usuario
+    let usuario = await prisma.usuario.findUnique({
+      where: { correo: email.toLowerCase() },
+    });
+
+    // 4. Si no existe, crearlo como ESTUDIANTE
+    if (!usuario) {
+      // Intentar extraer nombre y apellido si es posible, o usar el name entero
+      const partesNombre = name ? name.split(' ') : ['Usuario', 'Google'];
+      const nombre = partesNombre[0] || 'Estudiante';
+      const apellido = partesNombre.slice(1).join(' ') || '';
+
+      usuario = await prisma.usuario.create({
+        data: {
+          nombre,
+          apellido,
+          correo: email.toLowerCase(),
+          passwordHash: '', // No tiene password local
+          foto: picture,
+          rol: 'ESTUDIANTE',
+        },
+      });
+    }
+
+    if (!usuario.activo) {
+      return res.status(403).json({ error: 'Cuenta desactivada' });
+    }
+
+    // 5. Generar nuestros JWTs
+    const { accessToken, refreshToken } = await generarTokens(usuario);
+
+    return res.status(200).json({
+      mensaje: `Bienvenido, ${usuario.nombre}`,
+      accessToken,
+      refreshToken,
+      usuario: {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        apellido: usuario.apellido,
+        correo: usuario.correo,
+        rol: usuario.rol,
+        foto: usuario.foto,
+      },
+    });
+  } catch (err) {
+    console.error('[AUTH] googleSignIn error:', err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { login, register, googleSignIn, refresh, logout, whoami };
